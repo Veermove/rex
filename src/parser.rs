@@ -1,6 +1,86 @@
-use std::{str::Chars, rc::Rc, cell::RefCell};
+use std::{str::Chars, rc::Rc, cell::RefCell, fmt::Debug};
 
-pub fn print_tokens(next: &ChildNode) {
+type ChildNode<T> = Option<Rc<RefCell<T>>>;
+type RegexExpr = Vec<ExpressionNode>;
+
+pub fn tokens_to_expr(root: ChildNode<Node>) -> RegexExpr {
+    todo!()
+}
+
+#[derive(Debug, Default)]
+pub struct Node {
+    pub val: Token,
+    pub next: ChildNode<Node>,
+    // pub prev: ChildNode<Node>,
+}
+#[derive(Debug)]
+pub struct ExpressionNode {
+    pub ctx: Context,
+    pub root_child: ChildNode<Node>
+}
+
+#[derive(Debug)]
+pub enum Context {
+    Capture,
+    CharSet,
+    Quantifier,
+    Expression,
+}
+
+#[derive(Debug)]
+pub enum Token {
+    // Control flow
+    Start,
+    Error,
+    // ^...$
+    NotOrStringBegin,
+    StringEnd,
+
+    // (...)
+    CaptureBegin,
+    CaptureEnd,
+
+    // [...]
+    SetBegin,
+    SetEnd,
+    SetRange,
+
+    // \<str>
+    EscapeChar(String),
+
+    // Quantifieres
+    QzeroOrMore,
+    QzeroOrOne,
+    QoneOrMore,
+    QExactlyBegin,
+    QExactlyEnd,
+
+    MatchAny,
+    Character(String),
+}
+
+impl Default for Token {
+    fn default() -> Self {
+        Token::Error
+    }
+}
+
+pub fn head_tail(starting: ChildNode<Node>) -> (Option<Node>, ChildNode<Node>) {
+    if let Some(node) = starting {
+        let current = Rc::try_unwrap(node)
+            .map(|i| i.into_inner());
+        if let Ok(mut cur) = current {
+            let next = cur.next.take();
+            return (Some(cur), next)
+        }
+        return (None , None);
+    } else {
+        (None, None)
+    }
+
+}
+
+pub fn print_tokens(next: &ChildNode<Node>) {
     if let Some(next_node) = next {
         let nd = next_node.as_ref().borrow();
         println!("{:?}", nd.val);
@@ -8,15 +88,15 @@ pub fn print_tokens(next: &ChildNode) {
     }
 }
 
-pub fn tokenize(message: String) -> Result<ChildNode, String> {
+pub fn tokenize(message: String) -> Result<ChildNode<Node>, String> {
     let root = Rc::new(RefCell::new(Node {
-        val: Token::Start, next: None, prev: None,
+        val: Token::Start, next: None,
     }));
     parse_msg_to_tokens(message.chars(), Some(Rc::clone(&root)))?;
     Ok(Some(Rc::clone(&root)))
 }
 
-pub fn parse_msg_to_tokens(mut message: Chars, prev_node: ChildNode) -> Result<ChildNode, String> {
+pub fn parse_msg_to_tokens(mut message: Chars, prev_node: ChildNode<Node>) -> Result<ChildNode<Node>, String> {
     let next_c = message.next();
 
     if next_c.is_none() {
@@ -50,13 +130,11 @@ pub fn parse_msg_to_tokens(mut message: Chars, prev_node: ChildNode) -> Result<C
     if let Some(current_token) = cur_token {
         let node = Rc::new(RefCell::new(Node {
             val: current_token,
-            prev: None,
             next: None,
         }));
 
         if let Some(prev) = prev_node {
             prev.as_ref().borrow_mut().next = Some(Rc::clone(&node));
-            node.as_ref().borrow_mut().prev = Some(prev);
             return parse_msg_to_tokens(message, Some(Rc::clone(&node)));
         } else {
             return Err("Parsing Error".to_string());
@@ -64,46 +142,4 @@ pub fn parse_msg_to_tokens(mut message: Chars, prev_node: ChildNode) -> Result<C
    } else {
         return Err(format!("Syntax error on token: {}", next_c.unwrap_or('~')));
     }
-}
-
-type ChildNode = Option<Rc<RefCell<Node>>>;
-
-#[derive(Debug)]
-pub struct Node {
-    pub val: Token,
-    pub next: ChildNode,
-    pub prev: ChildNode,
-}
-
-
-
-#[derive(Debug)]
-pub enum Token {
-    // Control flow
-    Start,
-    // ^...$
-    NotOrStringBegin,
-    StringEnd,
-
-    // (...)
-    CaptureBegin,
-    CaptureEnd,
-
-    // [...]
-    SetBegin,
-    SetEnd,
-    SetRange,
-
-    // \<str>
-    EscapeChar(String),
-
-    // Quantifieres
-    QzeroOrMore,
-    QzeroOrOne,
-    QoneOrMore,
-    QExactlyBegin,
-    QExactlyEnd,
-
-    MatchAny,
-    Character(String),
 }
